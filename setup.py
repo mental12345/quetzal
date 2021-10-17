@@ -1,4 +1,5 @@
 import docker 
+import re
 import PySimpleGUI as sg
 
 client = docker.from_env()
@@ -14,8 +15,12 @@ def get_docker_images():
   docker_images = docker_img_dict.items()
   return docker_images
 
-def delete_image():
-  print("Hello world")
+def del_docker_images(image):
+  client.images.remove(image, force=True)
+
+def new_docker_image(name):
+  image = client.images.pull(name)
+  return image
 
 def get_docker_containers():
   docker_containers = []
@@ -28,6 +33,13 @@ def get_docker_containers():
   docker_containers = docker_dictionary.items()  
   return docker_containers
 
+def del_docker_container(container):
+  client.containers.get(container).remove(force=True)
+  
+def new_docker_container(container):
+  new_container = client.containers.create(container)
+  return new_container
+
 def get_docker_network():
   docker_networks = []
   network_dictionary = {}
@@ -39,6 +51,14 @@ def get_docker_network():
   docker_networks = network_dictionary.items()
   return docker_networks
 
+def del_docker_network(network):
+  client.networks.get(network).remove()
+
+def new_docker_network(name):
+  new_network = client.networks.create(name, driver="bridge")
+  return new_network
+
+
 def get_docker_volumes():
   docker_volumes = []
   volumes_dictionary = {}
@@ -47,22 +67,24 @@ def get_docker_volumes():
     docker_volumes.append(volume.short_id)
   return docker_volumes
 
+def del_docker_volume(volume):
+  client.volumes.get(volume).remove()
+
+def new_docker_volume(name):
+  new_volume = client.volumes.create(name, driver='local')
+  return new_volume
 
 images_layout = [
-           [sg.Listbox(size=(60,20), select_mode=sg.SELECT_MODE_EXTENDED, enable_events=True, values=[get_docker_images()], key='images')],
-           [sg.Button('Refresh',key='refresh_image_list')]]
+           [sg.Listbox(size=(60,20), select_mode=sg.SELECT_MODE_EXTENDED, enable_events=True, values=[get_docker_images()], key='images')]]
 
 containers_layout = [
-           [sg.Listbox(size=(60,20), select_mode=sg.SELECT_MODE_EXTENDED, enable_events=True, values=[get_docker_containers()], key='containers')],
-           [sg.Button('Refresh',key='refresh_container_list')]]
+           [sg.Listbox(size=(60,20), select_mode=sg.SELECT_MODE_EXTENDED, enable_events=True, values=[get_docker_containers()], key='containers')]]
 
 network_layout = [
-           [sg.Listbox(size=(60,20), select_mode=sg.SELECT_MODE_EXTENDED, enable_events=True, values=[get_docker_network()], key='networks')],
-           [sg.Button('Refresh',key='refresh_networks_list')]]
+           [sg.Listbox(size=(60,20), select_mode=sg.SELECT_MODE_EXTENDED, enable_events=True, values=[get_docker_network()], key='networks')]]
 
 volumes_layout = [
-           [sg.Listbox(size=(60,20), select_mode=sg.SELECT_MODE_EXTENDED, enable_events=True, values=[get_docker_volumes()], key='volumes')],
-           [sg.Button('Refresh',key='refresh_volumes_list')]]
+           [sg.Listbox(size=(60,20), select_mode=sg.SELECT_MODE_EXTENDED, enable_events=True, values=[get_docker_volumes()], key='volumes')]]
 
 
 tabgrp = [[sg.TabGroup([[
@@ -70,9 +92,10 @@ tabgrp = [[sg.TabGroup([[
                         sg.Tab('Containers', containers_layout, title_color='Blue'),
                         sg.Tab('Network', network_layout,title_color='Black'),
                         sg.Tab('Volumes', volumes_layout,title_color='Green')]], key='_TAB_GROUP_'),
-                        [sg.Button('Close'),
-                        sg.Button('New',key='new'),
-                        sg.Button('Delete',key='delete')]]]
+                        [sg.Button('New',key='new'),
+                        sg.Button('Refresh', key='refresh'),
+                        sg.Button('Delete',key='delete'),
+                        sg.Button('Close')]]]
 
 
 window = sg.Window("Quetzal: ContainerDashboard", tabgrp)
@@ -82,28 +105,78 @@ while True:
     if event == 'Close' or event == sg.WIN_CLOSED or event is None:          
       break    
     group = values['_TAB_GROUP_']
-    
-    if event == 'refresh_image_list':
-      images = get_docker_images()
-      window['images'].update(images)
-    if event == 'refresh_container_list':
-      window['containers'].update(get_docker_containers())
-    if event == 'refresh_networks_list':
-      window['networks'].update(get_docker_network())
-    if event == 'refresh_volumes_list':
-      window['volumes'].update(get_docker_volumes())
+
     #General Actions
+    if event == 'refresh':
+      if group == 'Images':
+        images = get_docker_images()
+        window['images'].update(images)
+      if group == 'Containers':
+        window['containers'].update(get_docker_containers())
+      if group == 'Volumes':
+        window['volumes'].update(get_docker_volumes())
+      if group == 'Network':
+        window['networks'].update(get_docker_network())
     if event == 'delete':
       if group == 'Network':
-        print("Network")
+        network = window['networks'].get()
+        if not network:
+          sg.popup_error('Must select an item')
+        else:
+          tuple = network[0]
+          fn = tuple[0]
+          del_docker_network(fn)
       if group == 'Containers':
-        print("COntainers") 
+        container = window['containers'].get()
+        if not container:
+          sg.popup_error('Must select an item')
+        else:
+          tuple = container[0]
+          fc = tuple[0]
+          del_docker_container(fc)
       if group == 'Volumes':
-        print("Volumes") 
+        volume = window['volumes'].get()
+        if not volume:
+          sg.popup_error('Must select an item')
+        else:
+          del_docker_volume(volume[0])
       if group == 'Images':
-        print("Images") 
-    
-
-
+        image = window['images'].get()
+        if not image:
+          sg.popup_error('Must select an item')
+        else:
+          tuple = image[0]    
+          fi = tuple[0]
+          fi = re.sub('sha256:','',fi)
+          del_docker_images(fi)
+    if event == 'new':
+      if group == 'Images':
+        image = sg.popup_get_text('Image', 'Please input image name, only latest will be downloaded')
+        try:
+          new_image=new_docker_image(image)
+          sg.popup(new_image.id)
+        except: 
+          sg.popup_error('Image not found: Please login or do a docker pull: ', image)
+      if group == 'Containers':
+        image = sg.popup_get_text('Container Image', 'Please input image name to use in container, only latest will be downloaded')
+        try:
+          new_container=new_docker_container(image)
+          sg.popup(new_container.id)
+        except: 
+          sg.popup_error('Image not found: Please login or do a docker create: ', image)
+      if group == 'Network':
+        network = sg.popup_get_text('Network', 'Please input Network name: ')
+        try:
+          new_network=new_docker_network(network)
+          sg.popup(new_network.name)
+        except: 
+          sg.popup_error('Network cannot be created')
+      if group == "Volumes":
+        volume = sg.popup_get_text('Volume', 'Please input Volume name: ')
+        try:
+          new_volume=new_docker_volume(volume)
+          sg.popup(new_volume.name)
+        except: 
+          sg.popup_error('Volume cannot be created')
 
 window.Close()
