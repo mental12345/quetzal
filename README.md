@@ -2,6 +2,8 @@
 
 Quetzal is a local container dashboard for Linux similar to Docker Desktop in other operating systems, is written in Python with PySimpleGUI.
 
+  ![QR]("frame.png")
+
 ## Dependencies installation
 
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install dependencies.
